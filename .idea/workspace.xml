@@ -5,15 +5,46 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="8b1568a1-947c-4c9d-83d7-022522265547" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/darkpulse.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/news_collector/News_crawler.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/news_collector/News_urls.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/news_collector/nlp_processor.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/copilot.data.migration.agent.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Readme.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/crawler/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/crawler/common/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/crawler/common/crawler_instance/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/crawler/common/crawler_instance/crawler_services/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/crawler/common/crawler_instance/crawler_services/redis_manager/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/crawler/common/crawler_instance/crawler_services/redis_manager/redis_controller.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/crawler/common/crawler_instance/crawler_services/shared/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/crawler/common/crawler_instance/crawler_services/shared/helper_method.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/crawler/common/crawler_instance/local_interface_model/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/crawler/common/crawler_instance/local_interface_model/leak/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/crawler/common/crawler_instance/local_interface_model/leak/leak_extractor_interface.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/crawler/common/crawler_instance/local_shared_model/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/crawler/common/crawler_instance/local_shared_model/data_model/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/crawler/common/crawler_instance/local_shared_model/data_model/entity_model.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/crawler/common/crawler_instance/local_shared_model/data_model/news_model.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/crawler/common/crawler_instance/local_shared_model/rule_model.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/crawler/common/dev_signature.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/crawler/request_manager.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/crawler/request_parser.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/news_collector/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/news_collector/scripts/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/news_collector/scripts/_csocybercrime.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/news_collector/scripts/_hackread.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/news_collector/scripts/_thehackernews.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/news_collector/scripts/main.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/news_collector/scripts/nlp_processor.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/news_collector/scripts/run_crawlers_once.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/result_dump.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ui_server.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/darkpulse.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/darkpulse.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/news_collector/News_crawler.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/news_collector/News_urls.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/news_collector/nlp_processor.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/news_collector/processed_articles.jsonl" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/news_collector/raw_articles.jsonl" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -30,9 +61,9 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 2
-}]]></component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 2
+}</component>
   <component name="ProjectId" id="34U3s2iEaV5gCk4FINrmaRZ6uP5" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
@@ -43,12 +74,21 @@
     "ModuleVcsDetector.initialDetectionPerformed": "true",
     "Python.News_crawler.executor": "Run",
     "Python.crawler.executor": "Run",
+    "Python.main.executor": "Run",
     "Python.nlp_processor.executor": "Run",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.git.unshallow": "true",
+    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
     "git-widget-placeholder": "master",
     "ignore.virus.scanning.warn.message": "true",
-    "settings.editor.selected.configurable": "settings.sync"
+    "last_opened_file_path": "/Users/alinaeem/Downloads/darkpulse",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "settings.sync",
+    "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
   <component name="RecentsManager">
@@ -56,13 +96,45 @@
       <recent name="C:\Users\DELL\darkpulse\news_collector" />
     </key>
   </component>
+  <component name="RunManager">
+    <configuration name="main" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="darkpulse" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/news_collector/scripts" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/news_collector/scripts/main.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Python.main" />
+      </list>
+    </recent_temporary>
+  </component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-python-sdk-9f8e2b94138c-36ea0e71a18c-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-251.26094.141" />
+        <option value="bundled-js-predefined-1d06a55b98c1-91d5c284f522-JavaScript-PY-241.15989.155" />
+        <option value="bundled-python-sdk-babbdf50b680-7c6932dee5e4-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-241.15989.155" />
       </set>
     </attachedChunks>
   </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
       <changelist id="8b1568a1-947c-4c9d-83d7-022522265547" name="Changes" comment="" />
@@ -70,7 +142,18 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1761254526166</updated>
+      <workItem from="1761940360201" duration="709000" />
+      <workItem from="1761941079931" duration="1898000" />
+      <workItem from="1761942983571" duration="4862000" />
+      <workItem from="1762132043631" duration="4350000" />
     </task>
     <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="com.intellij.coverage.CoverageDataManagerImpl">
+    <SUITE FILE_PATH="coverage/darkpulse$News_crawler.coverage" NAME="News_crawler Coverage Results" MODIFIED="1761940941480" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/news_collector" />
+    <SUITE FILE_PATH="coverage/darkpulse$main.coverage" NAME="main Coverage Results" MODIFIED="1762293784466" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/news_collector/scripts" />
   </component>
 </project>
