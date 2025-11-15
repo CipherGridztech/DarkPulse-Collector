@@ -1,29 +1,27 @@
 import re
-import hashlib
-import requests
 from abc import ABC
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple, Set
+from typing import List, Optional, Tuple, Set, Callable
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
 from crawler.common.crawler_instance.local_interface_model.leak.leak_extractor_interface import leak_extractor_interface
-from crawler.common.crawler_instance.local_shared_model.data_model import entity_model
-from crawler.common.crawler_instance.local_shared_model.data_model import news_model
+from crawler.common.crawler_instance.local_shared_model.data_model import entity_model, news_model
 from crawler.common.crawler_instance.local_shared_model import RuleModel, FetchProxy, FetchConfig, ThreatType
 from crawler.common.crawler_instance.crawler_services.redis_manager.redis_controller import redis_controller
 from crawler.common.crawler_instance.crawler_services.shared.helper_method import helper_method
 from crawler.common.dev_signature import developer_signature
 from news_collector.scripts import nlp_processor as nlp
+from news_collector.scripts._crawler_base import CrawlerBase
 
 
-class _thehackernews(leak_extractor_interface, ABC):
+class _thehackernews(leak_extractor_interface, CrawlerBase, ABC):
     _instance = None
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls, *a, **k):
         if cls._instance is None:
-            cls._instance = super(_thehackernews, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
@@ -31,7 +29,7 @@ class _thehackernews(leak_extractor_interface, ABC):
         if getattr(self, "_initialized", False):
             return
         self._initialized = True
-
+        CrawlerBase.__init__(self)
         self._card_data: List[news_model] = []
         self._entity_data: List[entity_model] = []
         self._redis = redis_controller()
@@ -40,22 +38,15 @@ class _thehackernews(leak_extractor_interface, ABC):
         self._developer_name = developer_name
         self._developer_note = developer_note
         self.callback = None
-        self._chromium_exe = None
 
-        # pagination limits
-        self._max_pages: int = 5            # how many index pages to walk (homepage + 4 "Next Page")
-        self._max_articles: Optional[int] = None  # None = no cap, else stop after N articles
-
-        # Master index keys (pipe-delimited strings, NOT JSON)
+        self._max_pages: int = 5
+        self._max_articles: Optional[int] = None
         self._raw_index_key = "THN:raw_index"
         self._processed_index_key = "THN:processed_index"
 
-        # optional: path to local Chromium
-       # self._chromium_exe = r"C:\Users\DELL\darkpulse\chromium-win64\chrome-win\chrome.exe"
-
         print("[THN] Initialized ✅ (pure Redis, no JSON)")
 
-    # ------- lifecycle/config hooks --------
+    # lifecycle/config
     def init_callback(self, callback=None):
         self.callback = callback
         print("[THN] Callback set")
@@ -75,7 +66,7 @@ class _thehackernews(leak_extractor_interface, ABC):
         print("[THN] Resetting crawl timestamp …")
         self._redis_set("THN:last_crawl", "", 60)
 
-    # ------- required interface props -------
+    # interface props
     @property
     def is_crawled(self) -> bool:
         return self._is_crawled
@@ -110,213 +101,68 @@ class _thehackernews(leak_extractor_interface, ABC):
 
     def contact_page(self) -> str:
         return "https://thehackernews.com/p/submit-news.html"
-
-    # ------- minimal Redis helpers (NO JSON) ------------
-    def _redis_get(self, key: str, default: str = "") -> str:
-        try:
-            val = self._redis.invoke_trigger(1, [key, default, None])
-            if val is None:
-                return default
-            return str(val)
-        except Exception:
-            return default
-
-    def _redis_set(self, key: str, value: object, expiry: Optional[int] = None):
-        val = "" if value is None else str(value)
-        self._redis.invoke_trigger(2, [key, val, expiry])
-
-    def _append_index(self, index_key: str, item_id: str):
-        cur = self._redis_get(index_key, "")
-        parts = [p for p in cur.split("|") if p] if cur else []
-        if item_id not in parts:
-            parts.append(item_id)
-            self._redis_set(index_key, "|".join(parts), expiry=None)
-
-    @staticmethod
-    def _sha1(text: str) -> str:
-        return hashlib.sha1(text.encode("utf-8")).hexdigest()
-
-    @staticmethod
-    def _date_to_string(d) -> str:
-        if d is None:
-            return ""
-        if isinstance(d, datetime):
-            return d.strftime("%Y-%m-%d")
-        return str(d)
-
-    # ------- store raw article (per-field keys) ---------
+    # storage (raw card handling remains site-specific)
     def _store_raw_card(self, card: news_model) -> str:
-        aid = self._sha1(card.m_url or (card.m_title or "") + str(datetime.now(timezone.utc).timestamp()))
-        base = f"THN:raw:{aid}"
-
-        # scalar fields
-        self._redis_set(f"{base}:url", card.m_url)
-        self._redis_set(f"{base}:title", card.m_title)
-        self._redis_set(f"{base}:author", card.m_author)
-        self._redis_set(f"{base}:date", self._date_to_string(card.m_leak_date))
-        date_raw = ""
-        try:
-            date_raw = (card.m_extra or {}).get("date_raw", "")  # type: ignore
-        except Exception:
-            date_raw = ""
-        self._redis_set(f"{base}:date_raw", date_raw)
-
-        self._redis_set(f"{base}:description", card.m_description)
-        self._redis_set(f"{base}:location", card.m_location or "")
-        self._redis_set(f"{base}:content", card.m_content or "")
-        self._redis_set(f"{base}:network:type", card.m_network)
-        self._redis_set(f"{base}:seed_url", self.seed_url)
-        self._redis_set(f"{base}:rendered", "1")
-        self._redis_set(f"{base}:scraped_at", int(datetime.now(timezone.utc).timestamp()))
-
-        # lists (no JSON)
-        links = card.m_links or []
-        self._redis_set(f"{base}:links_count", len(links))
-        for i, link in enumerate(links):
-            self._redis_set(f"{base}:links:{i}", link)
-
-        weblinks = card.m_weblink or []
-        self._redis_set(f"{base}:weblink_count", len(weblinks))
-        for i, link in enumerate(weblinks):
-            self._redis_set(f"{base}:weblink:{i}", link)
-
-        dumplinks = card.m_dumplink or []
-        self._redis_set(f"{base}:dumplink_count", len(dumplinks))
-        for i, link in enumerate(dumplinks):
-            self._redis_set(f"{base}:dumplink:{i}", link)
-
+        aid = self.store_raw_card_generic("THN:raw", card)
         self._append_index(self._raw_index_key, aid)
         return aid
-
-    # ------- store processed NLP output (generic flattener, no JSON) ----
     def _store_processed(self, aid: str, processed: dict):
+        # delegate to shared generic writer
         base = f"THN:processed:{aid}"
-
-        def write_obj(prefix: str, obj):
-            if isinstance(obj, dict):
-                for k, v in obj.items():
-                    write_obj(f"{prefix}:{k}", v)
-            elif isinstance(obj, list):
-                self._redis_set(f"{prefix}:count", len(obj))
-                for i, v in enumerate(obj):
-                    write_obj(f"{prefix}:{i}", v)
-            else:
-                self._redis_set(prefix, "" if obj is None else obj)
-
-        write_obj(base, processed)
+        self._store_processed_generic(base, processed)
         self._append_index(self._processed_index_key, aid)
 
-    # ------- HTTP session (fallback path) ---
-    def _make_requests_session(self) -> requests.Session:
-        print("[THN] Creating requests session …")
-        s = requests.Session()
-        s.headers.update({"User-Agent": "THNCollector/1.0 (+contact)"})
-        server = (self._proxy or {}).get("server")
-        if server:
-            s.proxies.update({"http": server, "https": server})
-            print(f"[THN] requests will use proxy: {server}")
-        return s
-
-    # ------- Playwright helpers -------------
-    def _launch_browser(self, p, use_proxy: bool) -> Tuple[object, object]:
-        launch_kwargs = {"headless": False}
-        if self._chromium_exe:
-            launch_kwargs["executable_path"] = self._chromium_exe
-        if use_proxy and (self._proxy or {}).get("server"):
-            launch_kwargs["proxy"] = {"server": self._proxy["server"]}
-            print(f"[THN] Launching Chromium WITH proxy: {self._proxy['server']}")
-        else:
-            print("[THN] Launching Chromium WITHOUT proxy")
-        browser = p.chromium.launch(**launch_kwargs)
-        context = browser.new_context()
-        return browser, context
-
-    # ------- robust author/date extraction --
-    @staticmethod
-    def _is_date_like(text: str) -> bool:
-        if not text:
-            return False
-        t = text.strip()
-        if re.match(r"^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},\s+\d{4}$", t):
-            return True
-        if re.match(r"^\d{4}-\d{2}-\d{2}$", t):
-            return True
-        if re.match(r"^\d{1,2}\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}$", t):
-            return True
-        return False
+    # requests session
+    # requests/playwright/date helpers are provided by CrawlerBase
 
     def _extract_author_date(self, soup: BeautifulSoup) -> Tuple[str, str]:
         author, date_raw = "", ""
+        # common container
         container = soup.select_one("div.clear.post-head span.p-author")
         if container:
             spans = [sp.get_text(strip=True) for sp in container.select("span.author") if sp.get_text(strip=True)]
-            seen, items = set(), []
+            items = []
+            seen = set()
             for x in spans:
                 if x not in seen:
-                    seen.add(x)
-                    items.append(x)
+                    seen.add(x); items.append(x)
             for token in items:
                 if not date_raw and self._is_date_like(token):
-                    date_raw = token
-                    continue
+                    date_raw = token; continue
                 if not author and not self._is_date_like(token) and token.lower() not in {"by", "-", "—"}:
                     author = token
-
-            if not date_raw:
-                el = soup.select_one("#Blog1 div.clear.post-head span.p-author span:nth-child(2)")
-                if el:
-                    cand = el.get_text(strip=True)
-                    if cand:
-                        date_raw = cand
-            if not author:
-                el = soup.select_one("#Blog1 div.clear.post-head span.p-author span:nth-child(4)")
-                if el:
-                    cand = el.get_text(strip=True)
-                    if cand and not self._is_date_like(cand):
-                        author = cand
-
+        # fallback selectors
         if not author:
             a_meta = soup.select_one("span.vcard a[rel='author'], span[itemprop='name'], a[rel='author']")
             if a_meta:
                 author = a_meta.get_text(strip=True)
-
         if not date_raw:
-            for se in ["time[datetime]", "abbr.published", "span.date", "span.post-date"]:
+            for se in ("time[datetime]", "abbr.published", "span.date", "span.post-date"):
                 el = soup.select_one(se)
                 if el:
                     date_raw = (el.get("datetime") or el.get_text(strip=True) or "").strip()
                     break
-
+        # tighten date to common form if present
         if date_raw:
             m = re.search(r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},\s+\d{4}", date_raw)
             if m:
                 date_raw = m.group(0)
-
         return author, date_raw
 
-    # ------- index page helpers (pagination) ----
     def _extract_article_links_from_index(self, soup: BeautifulSoup) -> Set[str]:
         links: Set[str] = set()
-        selectors = [
-            "a.story-link", "article h2 a", ".post-title a",
-            "h2.post-title a", "a[href*='/20']", ".article-title a",
-            "h3 a[href*='/']"
-        ]
+        selectors = ["a.story-link", "article h2 a", ".post-title a", "h2.post-title a", "a[href*='/20']", ".article-title a", "h3 a[href*='/']"]
         for sel in selectors:
             for tag in soup.select(sel):
                 href = tag.get("href")
                 if not href:
                     continue
                 full = urljoin(self.base_url, href)
-                # only blog posts: /20YY/... ; skip sections that are not posts
-                if full.startswith(self.base_url) and "/20" in full and not any(
-                    bad in full for bad in ("tag", "search", "page", "/contact", "/p/", "/videos/", "/expert-insights/")
-                ):
+                if full.startswith(self.base_url) and "/20" in full and not any(bad in full for bad in ("tag", "search", "page", "/contact", "/p/", "/videos/", "/expert-insights/")):
                     links.add(full)
         return links
 
     def _find_next_page_url(self, soup: BeautifulSoup) -> Optional[str]:
-        # Prefer explicit "Next Page" or "Older Posts" anchors, else look for updated-max param
         for a in soup.select("a"):
             txt = (a.get_text(strip=True) or "").lower()
             href = a.get("href") or ""
@@ -325,11 +171,9 @@ class _thehackernews(leak_extractor_interface, ABC):
             if ("next page" in txt) or ("older" in txt):
                 return urljoin(self.base_url, href)
         a = soup.select_one("a[href*='updated-max=']")
-        if a and a.get("href"):
-            return urljoin(self.base_url, a.get("href"))
-        return None
+        return urljoin(self.base_url, a.get("href")) if a and a.get("href") else None
 
-    # ------- core crawling ------------------
+    # core crawl (public)
     def run(self) -> dict:
         print("[THN] run() → Playwright first, then requests fallback")
         try:
@@ -339,213 +183,25 @@ class _thehackernews(leak_extractor_interface, ABC):
             return self._run_with_requests()
 
     def parse_leak_data(self) -> dict:
-        collected = 0
-        all_links: Set[str] = set()
+        print("[THN] run() → Playwright first, then requests fallback (centralized)")
+        visit_list = self.collect_links_playwright(self.seed_url, self._max_pages, self._extract_article_links_from_index, self._find_next_page_url, use_proxy=True, max_articles=self._max_articles)
+        print(f"[THN] Visiting {len(visit_list)} articles after pagination")
 
-        with sync_playwright() as p:
-            # open seed
+        def _parse_and_store(page, link, idx, total):
             try:
-                browser, context = self._launch_browser(p, use_proxy=True)
-                page = context.new_page()
-                print(f"[THN] Opening seed (proxy): {self.seed_url}")
-                page.goto(self.seed_url, timeout=60000, wait_until="load")
-            except Exception as ex:
-                print(f"[THN] Proxy navigation failed: {ex}. Retrying without proxy …")
-                try:
-                    context.close()
-                except Exception:
-                    pass
-                try:
-                    browser.close()
-                except Exception:
-                    pass
-                browser, context = self._launch_browser(p, use_proxy=False)
-                page = context.new_page()
-                print(f"[THN] Opening seed (no proxy): {self.seed_url}")
-                page.goto(self.seed_url, timeout=60000, wait_until="load")
-
-            # paginate index pages
-            current_url = self.seed_url
-            for page_no in range(1, self._max_pages + 1):
-                html = page.content()
-                soup = BeautifulSoup(html, "html.parser")
-
-                page_links = self._extract_article_links_from_index(soup)
-                before = len(all_links)
-                all_links.update(page_links)
-                print(f"[THN] Index page {page_no}: found {len(page_links)} post links (unique total {len(all_links)})")
-
-                # cap by article limit if set
-                if self._max_articles and len(all_links) >= self._max_articles:
-                    break
-
-                next_url = self._find_next_page_url(soup)
-                if not next_url:
-                    print("[THN] No further pages found.")
-                    break
-
-                if next_url == current_url:
-                    print("[THN] Next page URL same as current (loop guard).")
-                    break
-
-                current_url = next_url
-                print(f"[THN] → Next Page: {current_url}")
-                page.goto(current_url, timeout=60000, wait_until="load")
-
-            # now visit each article
-            visit_list = sorted(all_links)
-            if self._max_articles:
-                visit_list = visit_list[: self._max_articles]
-
-            print(f"[THN] Visiting {len(visit_list)} articles after pagination")
-            for idx, link in enumerate(visit_list, 1):
-                try:
-                    print(f"[THN] Visiting [{idx}/{len(visit_list)}]: {link}")
-                    page.goto(link, timeout=60000, wait_until="load")
-                    s = BeautifulSoup(page.content(), "html.parser")
-
-                    # title
-                    title_el = s.select_one("h1, .post-title, .entry-title, .article-title")
-                    title = title_el.get_text(strip=True) if title_el else "(No title)"
-
-                    # author + date
-                    author, date_raw = self._extract_author_date(s)
-
-                    # content
-                    content_tag = None
-                    for sel in ["div.articlebody", ".post-body", ".entry-content", ".article-content"]:
-                        el = s.select_one(sel)
-                        if el:
-                            content_tag = el
-                            break
-
-                    full_text = ""
-                    first_two_sentences = "Content not found."
-                    if content_tag:
-                        full_text = content_tag.get_text(" ", strip=True).replace("\n", " ")
-                        parts = re.split(r"(?<=[.!?])\s+", full_text)
-                        first_two = parts[:2]
-                        first_two_sentences = " ".join(first_two).strip() or first_two_sentences
-
-                    parsed_date = self._parse_date(date_raw)
-
-                    card = news_model(
-                        m_screenshot="",
-                        m_title=title,
-                        m_weblink=[link],
-                        m_dumplink=[link],
-                        m_url=link,
-                        m_base_url=self.base_url,
-                        m_content=full_text,
-                        m_network=helper_method.get_network_type(self.base_url),
-                        m_important_content=first_two_sentences,
-                        m_content_type=["news"],
-                        m_leak_date=parsed_date,
-                        m_author=author,
-                        m_description=first_two_sentences,
-                        m_location="",
-                        m_links=[link],
-                        m_extra={"date_raw": date_raw}
-                    )
-                    entity = entity_model(m_scrap_file=self.__class__.__name__, m_team="hackernews live")
-
-                    self._card_data.append(card)
-                    self._entity_data.append(entity)
-                    aid = self._store_raw_card(card)
-
-                    collected += 1
-                    print(f"[THN] ✅ Parsed ({collected}/{len(visit_list)}): {title[:80]}")
-                    print(f"[THN]    Author: {author or '(n/a)'} | Date: {date_raw or '(n/a)'} | AID: {aid}")
-
-                except Exception as ex:
-                    print(f"[THN] ❌ Error parsing article {link}: {ex}")
-                    continue
-
-            # close browser
-            try:
-                page.close()
-            except Exception:
-                pass
-            try:
-                context.close()
-            except Exception:
-                pass
-            try:
-                browser.close()
-            except Exception:
-                pass
-
-        # NLP enrichment (stores processed per-field, no JSON)
-        self._nlp_enrich_and_store()
-
-        self._is_crawled = True
-        print(f"[THN] ✅ Done. Collected={collected}")
-        return {
-            "seed_url": self.seed_url,
-            "articles_collected": collected,
-            "developer_signature": self.developer_signature()
-        }
-
-    def _run_with_requests(self) -> dict:
-        print("[THN] Fallback: requests-based crawl")
-        collected = 0
-        session = self._make_requests_session()
-
-        # paginate index pages
-        all_links: Set[str] = set()
-        current_url = self.seed_url
-
-        for page_no in range(1, self._max_pages + 1):
-            r = session.get(current_url, timeout=60)
-            r.raise_for_status()
-            soup = BeautifulSoup(r.text, "html.parser")
-
-            page_links = self._extract_article_links_from_index(soup)
-            all_links.update(page_links)
-            print(f"[THN] Index page {page_no} (requests): +{len(page_links)} links (unique {len(all_links)})")
-
-            if self._max_articles and len(all_links) >= self._max_articles:
-                break
-
-            next_url = self._find_next_page_url(soup)
-            if not next_url or next_url == current_url:
-                print("[THN] No further pages (requests).")
-                break
-            current_url = next_url
-
-        visit_list = sorted(all_links)
-        if self._max_articles:
-            visit_list = visit_list[: self._max_articles]
-
-        print(f"[THN] Visiting {len(visit_list)} articles (requests mode)")
-        for idx, link in enumerate(visit_list, 1):
-            try:
-                art = session.get(link, timeout=60)
-                art.raise_for_status()
-                s = BeautifulSoup(art.text, "html.parser")
-
+                print(f"[THN] Visiting [{idx}/{total}]: {link}")
+                s = BeautifulSoup(page.content(), "html.parser")
                 title_el = s.select_one("h1, .post-title, .entry-title, .article-title")
                 title = title_el.get_text(strip=True) if title_el else "(No title)"
-
                 author, date_raw = self._extract_author_date(s)
-
-                content_tag = None
-                for sel in ["div.articlebody", ".post-body", ".entry-content", ".article-content"]:
-                    el = s.select_one(sel)
-                    if el:
-                        content_tag = el
-                        break
-
+                content_tag = next((s.select_one(sel) for sel in ("div.articlebody", ".post-body", ".entry-content", ".article-content") if s.select_one(sel)), None)
                 full_text = ""
                 first_two_sentences = "Content not found."
                 if content_tag:
                     full_text = content_tag.get_text(" ", strip=True).replace("\n", " ")
                     parts = re.split(r"(?<=[.!?])\s+", full_text)
-                    first_two = parts[:2]
-                    first_two_sentences = " ".join(first_two).strip() or first_two_sentences
-
+                    first_two_sentences = " ".join(parts[:2]).strip() or first_two_sentences
                 parsed_date = self._parse_date(date_raw)
-
                 card = news_model(
                     m_screenshot="",
                     m_title=title,
@@ -565,15 +221,74 @@ class _thehackernews(leak_extractor_interface, ABC):
                     m_extra={"date_raw": date_raw}
                 )
                 entity = entity_model(m_scrap_file=self.__class__.__name__, m_team="hackernews live")
-
                 self._card_data.append(card)
                 self._entity_data.append(entity)
                 aid = self._store_raw_card(card)
+                print(f"[THN] ✅ Parsed: {title[:80]} | Author: {author or '(n/a)'} | Date: {date_raw or '(n/a)'} | AID: {aid}")
+                return True
+            except Exception as ex:
+                print(f"[THN] ❌ Error parsing article {link}: {ex}")
+                return False
 
+        collected = self.visit_links_playwright(visit_list, _parse_and_store, use_proxy=True)
+
+        # delegate to base generic NLP enricher
+        self._nlp = nlp
+        self.nlp_enrich_and_store_generic(self._card_data, self._processed_index_key)
+
+        self._is_crawled = True
+        print(f"[THN] ✅ Done. Collected={collected}")
+        return {"seed_url": self.seed_url, "articles_collected": collected, "developer_signature": self.developer_signature()}
+
+    def _run_with_requests(self) -> dict:
+        print("[THN] Fallback: requests-based crawl")
+        collected = 0
+        session = self._make_requests_session()
+        all_links: Set[str] = set()
+        current_url = self.seed_url
+
+        for page_no in range(1, self._max_pages + 1):
+            r = session.get(current_url, timeout=60)
+            r.raise_for_status()
+            soup = BeautifulSoup(r.text, "html.parser")
+            all_links.update(self._extract_article_links_from_index(soup))
+            print(f"[THN] Index page {page_no} (requests): unique {len(all_links)}")
+            if self._max_articles and len(all_links) >= self._max_articles:
+                break
+            next_url = self._find_next_page_url(soup)
+            if not next_url or next_url == current_url:
+                break
+            current_url = next_url
+
+        visit_list = sorted(all_links)[: self._max_articles] if self._max_articles else sorted(all_links)
+        print(f"[THN] Visiting {len(visit_list)} articles (requests mode)")
+
+        for idx, link in enumerate(visit_list, 1):
+            try:
+                art = session.get(link, timeout=60); art.raise_for_status()
+                s = BeautifulSoup(art.text, "html.parser")
+                title_el = s.select_one("h1, .post-title, .entry-title, .article-title")
+                title = title_el.get_text(strip=True) if title_el else "(No title)"
+                author, date_raw = self._extract_author_date(s)
+                content_tag = next((s.select_one(sel) for sel in ("div.articlebody", ".post-body", ".entry-content", ".article-content") if s.select_one(sel)), None)
+                full_text = ""
+                first_two_sentences = "Content not found."
+                if content_tag:
+                    full_text = content_tag.get_text(" ", strip=True).replace("\n", " ")
+                    parts = re.split(r"(?<=[.!?])\s+", full_text)
+                    first_two_sentences = " ".join(parts[:2]).strip() or first_two_sentences
+                parsed_date = self._parse_date(date_raw)
+                card = news_model(
+                    m_screenshot="", m_title=title, m_weblink=[link], m_dumplink=[link], m_url=link, m_base_url=self.base_url,
+                    m_content=full_text, m_network=helper_method.get_network_type(self.base_url),
+                    m_important_content=first_two_sentences, m_content_type=["news"], m_leak_date=parsed_date,
+                    m_author=author, m_description=first_two_sentences, m_location="", m_links=[link], m_extra={"date_raw": date_raw}
+                )
+                entity = entity_model(m_scrap_file=self.__class__.__name__, m_team="hackernews live")
+                self._card_data.append(card); self._entity_data.append(entity); aid = self._store_raw_card(card)
                 collected += 1
                 print(f"[THN] ✅ Parsed (requests) ({idx}/{len(visit_list)}): {title[:80]}")
                 print(f"[THN]    Author: {author or '(n/a)'} | Date: {date_raw or '(n/a)'} | AID: {aid}")
-
             except Exception as ex:
                 print(f"[THN] ❌ Error (requests) parsing {link}: {ex}")
                 continue
@@ -581,87 +296,11 @@ class _thehackernews(leak_extractor_interface, ABC):
         self._nlp_enrich_and_store()
         self._is_crawled = True
         print(f"[THN] ✅ Done (requests). Collected={collected}")
-        return {
-            "seed_url": self.seed_url,
-            "articles_collected": collected,
-            "developer_signature": self.developer_signature()
-        }
+        return {"seed_url": self.seed_url, "articles_collected": collected, "developer_signature": self.developer_signature()}
 
-    # ------- NLP (pure Redis, no JSON) ----
+    # NLP & date parsing (unchanged logic)
     def _nlp_enrich_and_store(self):
-        try:
-            print(f"[THN] NLP enrichment on {len(self._card_data)} records (no JSON)")
-            for card in self._card_data:
-                date_raw = ""
-                try:
-                    date_raw = (card.m_extra or {}).get("date_raw", "")  # type: ignore
-                except Exception:
-                    date_raw = ""
-                date_iso = self._date_to_string(card.m_leak_date)
-
-                rec = {
-                    "url": card.m_url,
-                    "title": card.m_title,
-                    "author": card.m_author,
-                    "date": date_raw,
-                    "published": date_iso,
-                    "description": card.m_description,
-                    "location": card.m_location,
-                    "links": card.m_links or [],
-                    "content": card.m_content,
-                    "network": {"type": card.m_network},
-                    "seed_url": self.seed_url,
-                    "rendered": True,
-                    "scraped_at": int(datetime.now(timezone.utc).timestamp())
-                }
-                try:
-                    processed = nlp.process_record(rec)
-                except Exception as e:
-                    print("[THN] NLP processing failed for record:", e)
-                    processed = None
-
-                aid = self._sha1(card.m_url or card.m_title)
-
-                if processed:
-                    self._store_processed(aid, processed)
-                    date_raw_out = str(processed.get("date_raw") or rec.get("date") or "")
-                    date_iso_out = str(processed.get("date") or rec.get("published") or "")
-                    title = str(processed.get("title") or rec.get("title") or "")
-                    author = str(processed.get("author") or rec.get("author") or "")
-                    description = str(processed.get("description") or (processed.get("summary") or ""))[:3000]
-                    url = str(processed.get("url") or rec.get("url") or "")
-                    seed = rec.get("seed_url") or self.seed_url
-
-                    print("\n----------------------------------------")
-                    print(f"Date(raw): {date_raw_out}")
-                    print(f"Date(iso): {date_iso_out}")
-                    print(f"title: {title}")
-                    print(f"Author: {author}")
-                    print(f"description: {description}\n")
-                    print(f"seed url: {seed}")
-                    print(f"dump url: {url}")
-                    print("----------------------------------------\n")
-
-            print("[THN] NLP enrichment stored to Redis ✅ (no JSON)")
-
-        except Exception as ex:
-            print("[THN] ⚠ NLP enrichment error:", ex)
-
-    # ------- date parsing -------------------
-    @staticmethod
-    def _parse_date(s: str):
-        if not s:
-            return None
-        s = s.strip()
-        for fmt in ("%Y-%m-%d", "%B %d, %Y", "%b %d, %Y", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S", "%d %b %Y", "%d %B %Y"):
-            try:
-                return datetime.strptime(s, fmt).date()
-            except Exception:
-                continue
-        m = re.search(r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},\s+\d{4}", s)
-        if m:
-            try:
-                return datetime.strptime(m.group(0), "%b %d, %Y").date()
-            except Exception:
-                pass
-        return None
+        # thin wrapper to keep original name for callers
+        self._nlp = nlp
+        self.nlp_enrich_and_store_generic(self._card_data, self._processed_index_key)
+    # use CrawlerBase._parse_date
